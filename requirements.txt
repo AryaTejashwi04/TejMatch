@@ -9,4 +9,6 @@ matplotlib
 google-generativeai
 python-docx
 fpdf
+sentence-transformers
+torch
 
