@@ -8,15 +8,20 @@ from sklearn.metrics.pairwise import cosine_similarity
 import google.generativeai as genai
 from fpdf import FPDF
 from sentence_transformers import SentenceTransformer
+import torch  # ✅ Added for device handling
 
 # ✅ Configure Gemini API
-genai.configure(api_key="YOUR_API_KEY")  # Replace with your real Gemini API key
+genai.configure(api_key="AIzaSyCFSPWY8h9qVgqTkYvNA4Q-n6UTWXFTGNw")
 
 # ✅ Load files
 svc_model = pickle.load(open('clf.pkl', 'rb'))
 tfidf = pickle.load(open('tfidf.pkl', 'rb'))
 le = pickle.load(open('encoder.pkl', 'rb'))
+
+# ✅ Fix SBERT model device error
+device = torch.device('cpu')
 sbert_model = SentenceTransformer('all-MiniLM-L6-v2')
+sbert_model.to(device)
 
 def clean_resume(text):
     text = re.sub(r"http\S+", "", text)
