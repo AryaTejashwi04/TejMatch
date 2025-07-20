@@ -29,14 +29,12 @@ device = torch.device('cpu')
 sbert_model = SentenceTransformer('all-MiniLM-L6-v2')
 sbert_model.to(device)
 
-# 📁 Resume cleaner
 def clean_resume(text):
     text = re.sub(r"http\S+", "", text)
     text = re.sub(r"[^a-zA-Z0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
-# 📤 Text extractor for PDF/DOCX/TXT
 def extract_text(file):
     ext = file.name.split(".")[-1]
     if ext == "pdf":
@@ -82,7 +80,7 @@ def get_skill_diff(resume_text, jd_text):
     missing = jd_words - resume_words
     return list(matched), list(missing)
 
-# 🔍 Manual feedback based on score
+# 🧠 Manual feedback based on combined score
 def get_manual_feedback(score):
     low = [
         "Add measurable achievements like 'Increased revenue by 25%'.",
@@ -124,8 +122,7 @@ def get_manual_feedback(score):
 
     return "\n".join(f"- {tip}" for tip in tips)
 
-# 📄 PDF generator
-def generate_pdf(category, score, sbert, ats, matched, missing, feedback):
+def generate_pdf(category, score, ats, matched, missing, feedback):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
@@ -133,8 +130,7 @@ def generate_pdf(category, score, sbert, ats, matched, missing, feedback):
     pdf.cell(200, 10, txt="TejMatch Resume Report", ln=True, align='C')
     pdf.ln(10)
     pdf.cell(200, 10, txt=f"Predicted Category: {category}", ln=True)
-    pdf.cell(200, 10, txt=f"Your Score is: {score}%", ln=True)
-    pdf.cell(200, 10, txt=f"SBERT Semantic Score: {sbert}%", ln=True)
+    pdf.cell(200, 10, txt=f"Score: {score}%", ln=True)
     pdf.cell(200, 10, txt=f"ATS Score: {ats}/100", ln=True)
 
     pdf.ln(5)
@@ -148,15 +144,14 @@ def generate_pdf(category, score, sbert, ats, matched, missing, feedback):
         pdf.cell(200, 10, txt=f"- {skill}", ln=True)
 
     pdf.ln(5)
-    pdf.multi_cell(0, 10, txt="Suggested Improvements:\n" + feedback)
+    pdf.multi_cell(0, 10, txt="Suggestions for Improvement:\n" + feedback)
 
     pdf.output("resume_feedback.pdf")
 
-# 🚀 Main UI
 def main():
     st.set_page_config("TejMatch – Smart Resume Analyzer", layout="wide")
-    st.title("💼 TejMatch – AI Resume Analyzer")
-    st.write("Upload your resume and job description to receive intelligent feedback and match scores.")
+    st.title("💼 TejMatch – Smart Resume Analyzer")
+    st.write("Upload your resume and job description to receive feedback, scores, and suggestions.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -171,34 +166,33 @@ def main():
             st.success("✅ Files extracted successfully")
 
             category, resume_vec = predict_category(resume_text)
-            st.markdown(f"### 🔍 Predicted Job Category: `{category}`")
 
             match_score = get_match_score(resume_vec, jd_text)
             sbert_score = get_sbert_score(resume_text, jd_text)
+            combined_score = round((match_score + sbert_score) / 2, 2)
+
             matched, missing = get_skill_diff(resume_text, jd_text)
             ats_score = get_ats_score(resume_text, matched)
-            feedback = get_manual_feedback(match_score)
+            feedback = get_manual_feedback(combined_score)
 
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("🎯 Your Score is:", f"{match_score}%")
-                st.progress(match_score / 100)
-            with col2:
-                st.metric("🧠 SBERT Semantic Score", f"{sbert_score}%")
-                st.progress(sbert_score / 100)
+            st.markdown(f"### 🔍 Predicted Job Category: `{category}`")
+
+            st.metric("🎯 Score", f"{combined_score}%")
+            st.progress(combined_score / 100)
 
             st.markdown(f"### 📊 ATS Score: **{ats_score}/100**")
 
             st.markdown("### ✅ Matched Skills")
             st.write(", ".join(matched[:15]) or "None")
+
             st.markdown("### ❌ Missing Skills")
             st.write(", ".join(missing[:15]) or "None")
 
-            st.markdown("### ✨ Suggestions for Improvement")
+            st.markdown("### 🧠 Suggestions for Improvement")
             st.markdown(feedback)
 
             if st.button("📥 Download Report as PDF"):
-                generate_pdf(category, match_score, sbert_score, ats_score, matched, missing, feedback)
+                generate_pdf(category, combined_score, ats_score, matched, missing, feedback)
                 with open("resume_feedback.pdf", "rb") as f:
                     st.download_button("Download PDF", f, file_name="TejMatch_Resume_Report.pdf")
 
