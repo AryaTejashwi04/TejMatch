@@ -8,17 +8,25 @@ from sklearn.metrics.pairwise import cosine_similarity
 import google.generativeai as genai
 from fpdf import FPDF
 from sentence_transformers import SentenceTransformer
-import torch  # ✅ Added for device handling
+import torch
+
+# ✅ Hide GitHub icon & Streamlit footer
+st.markdown("""
+    <style>
+    #MainMenu, footer, header, .viewerBadge_container__1QSob {
+        visibility: hidden;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ✅ Configure Gemini API
 genai.configure(api_key="AIzaSyCFSPWY8h9qVgqTkYvNA4Q-n6UTWXFTGNw")
 
-# ✅ Load files
+# ✅ Load models
 svc_model = pickle.load(open('clf.pkl', 'rb'))
 tfidf = pickle.load(open('tfidf.pkl', 'rb'))
 le = pickle.load(open('encoder.pkl', 'rb'))
 
-# ✅ Fix SBERT model device error
 device = torch.device('cpu')
 sbert_model = SentenceTransformer('all-MiniLM-L6-v2')
 sbert_model.to(device)
@@ -33,7 +41,7 @@ def extract_text(file):
     ext = file.name.split(".")[-1]
     if ext == "pdf":
         reader = PyPDF2.PdfReader(file)
-        return " ".join(page.extract_text() for page in reader.pages)
+        return " ".join(page.extract_text() for page in reader.pages if page.extract_text())
     elif ext == "docx":
         return "\n".join([para.text for para in docx.Document(file).paragraphs])
     elif ext == "txt":
@@ -61,7 +69,7 @@ def get_sbert_score(resume, jd):
 
 def get_ats_score(resume_text, matched_skills):
     word_count = len(resume_text.split())
-    score = 50  # base
+    score = 50
     if 300 < word_count < 1200:
         score += 20
     score += min(30, len(matched_skills))
@@ -121,15 +129,19 @@ def generate_pdf(category, score, sbert, ats, matched, missing, feedback):
 def main():
     st.set_page_config("TejMatch – Smart Resume Analyzer", layout="wide")
     st.title("💼 TejMatch – AI Resume Analyzer")
-    st.write("Upload your resume, paste a job description, and receive intelligent feedback with scores.")
+    st.write("Upload your resume and job description (PDF/DOCX/TXT) to receive smart feedback and scores.")
 
-    uploaded = st.file_uploader("📤 Upload Resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
-    jd_text = st.text_area("📝 Paste Job Description")
+    col1, col2 = st.columns(2)
+    with col1:
+        uploaded_resume = st.file_uploader("📤 Upload Resume", type=["pdf", "docx", "txt"])
+    with col2:
+        uploaded_jd = st.file_uploader("📥 Upload Job Description", type=["pdf", "docx", "txt"])
 
-    if uploaded and jd_text:
+    if uploaded_resume and uploaded_jd:
         try:
-            resume_text = extract_text(uploaded)
-            st.success("✅ Resume extracted successfully")
+            resume_text = extract_text(uploaded_resume)
+            jd_text = extract_text(uploaded_jd)
+            st.success("✅ Files extracted successfully")
 
             category, resume_vec = predict_category(resume_text)
             st.markdown(f"### 🔍 Predicted Job Category: `{category}`")
@@ -155,7 +167,7 @@ def main():
             st.write(", ".join(missing[:15]) or "None")
 
             st.markdown("### 🤖 Gemini Suggestions")
-            with st.spinner("Contacting Gemini..."):
+            with st.spinner("Analyzing resume..."):
                 feedback = get_gemini_feedback(resume_text, jd_text)
             st.markdown(feedback)
 
