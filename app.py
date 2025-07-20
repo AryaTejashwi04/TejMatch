@@ -5,12 +5,12 @@ import PyPDF2
 import re
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-import google.generativeai as genai
 from fpdf import FPDF
 from sentence_transformers import SentenceTransformer
 import torch
+import random
 
-# ✅ Hide GitHub icon & Streamlit footer
+# 🔒 Hide GitHub & Streamlit UI clutter
 st.markdown("""
     <style>
     #MainMenu, footer, header, .viewerBadge_container__1QSob {
@@ -19,24 +19,24 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ✅ Configure Gemini API
-genai.configure(api_key="AIzaSyCFSPWY8h9qVgqTkYvNA4Q-n6UTWXFTGNw")
-
 # ✅ Load models
 svc_model = pickle.load(open('clf.pkl', 'rb'))
 tfidf = pickle.load(open('tfidf.pkl', 'rb'))
 le = pickle.load(open('encoder.pkl', 'rb'))
 
+# ✅ Load SBERT model
 device = torch.device('cpu')
 sbert_model = SentenceTransformer('all-MiniLM-L6-v2')
 sbert_model.to(device)
 
+# 📁 Resume cleaner
 def clean_resume(text):
     text = re.sub(r"http\S+", "", text)
     text = re.sub(r"[^a-zA-Z0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
+# 📤 Text extractor for PDF/DOCX/TXT
 def extract_text(file):
     ext = file.name.split(".")[-1]
     if ext == "pdf":
@@ -75,23 +75,6 @@ def get_ats_score(resume_text, matched_skills):
     score += min(30, len(matched_skills))
     return min(score, 100)
 
-def get_gemini_feedback(resume, jd):
-    prompt = f"""You're an AI resume assistant. Here's a resume:
----
-{resume}
----
-And here's a job description:
----
-{jd}
----
-Give bullet-point suggestions to improve the resume for this job. Rewrite one weak bullet point using strong action verbs."""
-    try:
-        model = genai.GenerativeModel("gemini-pro")
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        return f"Gemini Error: {e}"
-
 def get_skill_diff(resume_text, jd_text):
     resume_words = set(clean_resume(resume_text).lower().split())
     jd_words = set(clean_resume(jd_text).lower().split())
@@ -99,6 +82,49 @@ def get_skill_diff(resume_text, jd_text):
     missing = jd_words - resume_words
     return list(matched), list(missing)
 
+# 🔍 Manual feedback based on score
+def get_manual_feedback(score):
+    low = [
+        "Add measurable achievements like 'Increased revenue by 25%'.",
+        "Use action verbs such as 'Led', 'Built', 'Executed'.",
+        "Tailor resume to match keywords in the job description.",
+        "Include certifications, courses, or licenses.",
+        "Avoid vague phrases like 'hardworking' or 'quick learner'.",
+        "Add technical tools or domain-specific software.",
+        "Break paragraphs into readable bullet points.",
+        "Add job titles with clear dates and locations.",
+    ]
+    medium = [
+        "Use bullet points that emphasize quantifiable impact.",
+        "Mention specific tools used (e.g., Excel, Tableau).",
+        "Add a short summary section at the top.",
+        "Reorder items to highlight the most relevant experience.",
+        "Add links to online portfolios or profiles.",
+        "Clarify job titles and responsibilities clearly.",
+        "Merge duplicate skills to reduce redundancy.",
+        "Keep verb tense consistent across sections.",
+    ]
+    high = [
+        "Add recent projects or accomplishments to keep resume fresh.",
+        "Include leadership, mentoring or team collaboration examples.",
+        "Use a clean format that’s ATS-friendly and consistent.",
+        "Ensure proper font sizes and spacing throughout.",
+        "Mention preferred job types or industries.",
+        "Add a personal branding statement or tagline.",
+        "Convert resume to PDF before submitting.",
+        "Align sections visually to improve readability.",
+    ]
+
+    if score <= 40:
+        tips = random.sample(low, 2)
+    elif score <= 70:
+        tips = random.sample(medium, 2)
+    else:
+        tips = random.sample(high, 2)
+
+    return "\n".join(f"- {tip}" for tip in tips)
+
+# 📄 PDF generator
 def generate_pdf(category, score, sbert, ats, matched, missing, feedback):
     pdf = FPDF()
     pdf.add_page()
@@ -107,7 +133,7 @@ def generate_pdf(category, score, sbert, ats, matched, missing, feedback):
     pdf.cell(200, 10, txt="TejMatch Resume Report", ln=True, align='C')
     pdf.ln(10)
     pdf.cell(200, 10, txt=f"Predicted Category: {category}", ln=True)
-    pdf.cell(200, 10, txt=f"TF-IDF Match Score: {score}%", ln=True)
+    pdf.cell(200, 10, txt=f"Your Score is: {score}%", ln=True)
     pdf.cell(200, 10, txt=f"SBERT Semantic Score: {sbert}%", ln=True)
     pdf.cell(200, 10, txt=f"ATS Score: {ats}/100", ln=True)
 
@@ -122,14 +148,15 @@ def generate_pdf(category, score, sbert, ats, matched, missing, feedback):
         pdf.cell(200, 10, txt=f"- {skill}", ln=True)
 
     pdf.ln(5)
-    pdf.multi_cell(0, 10, txt="Gemini Suggestions:\n" + feedback)
+    pdf.multi_cell(0, 10, txt="Suggested Improvements:\n" + feedback)
 
     pdf.output("resume_feedback.pdf")
 
+# 🚀 Main UI
 def main():
     st.set_page_config("TejMatch – Smart Resume Analyzer", layout="wide")
     st.title("💼 TejMatch – AI Resume Analyzer")
-    st.write("Upload your resume and job description (PDF/DOCX/TXT) to receive smart feedback and scores.")
+    st.write("Upload your resume and job description to receive intelligent feedback and match scores.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -150,14 +177,15 @@ def main():
             sbert_score = get_sbert_score(resume_text, jd_text)
             matched, missing = get_skill_diff(resume_text, jd_text)
             ats_score = get_ats_score(resume_text, matched)
+            feedback = get_manual_feedback(match_score)
 
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("🎯 TF-IDF Match Score", f"{match_score}%")
-                st.progress(match_score)
+                st.metric("🎯 Your Score is:", f"{match_score}%")
+                st.progress(match_score / 100)
             with col2:
                 st.metric("🧠 SBERT Semantic Score", f"{sbert_score}%")
-                st.progress(sbert_score)
+                st.progress(sbert_score / 100)
 
             st.markdown(f"### 📊 ATS Score: **{ats_score}/100**")
 
@@ -166,9 +194,7 @@ def main():
             st.markdown("### ❌ Missing Skills")
             st.write(", ".join(missing[:15]) or "None")
 
-            st.markdown("### 🤖 Gemini Suggestions")
-            with st.spinner("Analyzing resume..."):
-                feedback = get_gemini_feedback(resume_text, jd_text)
+            st.markdown("### ✨ Suggestions for Improvement")
             st.markdown(feedback)
 
             if st.button("📥 Download Report as PDF"):
