@@ -219,5 +219,4 @@ def main():
             st.markdown(feedback)
 
             if st.button("📥 Download Report as PDF"):
-                generate_pdf(category, combined_score, ats_score, matched, missing, feedback)
-                with open
+                generate
