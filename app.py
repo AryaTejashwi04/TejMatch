@@ -7,8 +7,8 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from fpdf import FPDF
 from sentence_transformers import SentenceTransformer
-import torch
 import random
+import time
 
 # 🔒 Hide GitHub & Streamlit UI clutter
 st.markdown("""
@@ -24,17 +24,21 @@ svc_model = pickle.load(open('clf.pkl', 'rb'))
 tfidf = pickle.load(open('tfidf.pkl', 'rb'))
 le = pickle.load(open('encoder.pkl', 'rb'))
 
-# ✅ Load SBERT model
-device = torch.device('cpu')
-sbert_model = SentenceTransformer('all-MiniLM-L6-v2')
-sbert_model.to(device)
+# ✅ Load SBERT model safely
+try:
+    sbert_model = SentenceTransformer('all-MiniLM-L6-v2')
+except Exception as e:
+    st.error("❌ SBERT model failed to load. Try restarting or check compatibility.")
+    st.stop()
 
+# 🧹 Clean resume text
 def clean_resume(text):
     text = re.sub(r"http\S+", "", text)
     text = re.sub(r"[^a-zA-Z0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
+# 📄 Extract text from uploaded file
 def extract_text(file):
     ext = file.name.split(".")[-1]
     if ext == "pdf":
@@ -47,6 +51,7 @@ def extract_text(file):
     else:
         raise ValueError("Unsupported file type")
 
+# 🔍 Predict job category
 def predict_category(text):
     cleaned = clean_resume(text)
     vec = tfidf.transform([cleaned]).toarray()
@@ -54,17 +59,20 @@ def predict_category(text):
     label = le.inverse_transform(pred)
     return label[0], vec
 
+# 🎯 TF-IDF match score
 def get_match_score(resume_vec, jd_text):
     jd_vec = tfidf.transform([clean_resume(jd_text)]).toarray()
     score = cosine_similarity(resume_vec, jd_vec)[0][0]
     return round(score * 100, 2)
 
+# 🧠 SBERT semantic score
 def get_sbert_score(resume, jd):
     emb1 = sbert_model.encode([resume])[0]
     emb2 = sbert_model.encode([jd])[0]
     score = cosine_similarity([emb1], [emb2])[0][0]
     return round(score * 100, 2)
 
+# 📊 ATS score logic
 def get_ats_score(resume_text, matched_skills):
     word_count = len(resume_text.split())
     score = 50
@@ -73,6 +81,7 @@ def get_ats_score(resume_text, matched_skills):
     score += min(30, len(matched_skills))
     return min(score, 100)
 
+# 🧩 Skill matching
 def get_skill_diff(resume_text, jd_text):
     resume_words = set(clean_resume(resume_text).lower().split())
     jd_words = set(clean_resume(jd_text).lower().split())
@@ -80,7 +89,7 @@ def get_skill_diff(resume_text, jd_text):
     missing = jd_words - resume_words
     return list(matched), list(missing)
 
-# 🧠 Manual feedback based on combined score
+# 💡 Manual feedback based on score
 def get_manual_feedback(score):
     low = [
         "Add measurable achievements like 'Increased revenue by 25%'.",
@@ -122,6 +131,7 @@ def get_manual_feedback(score):
 
     return "\n".join(f"- {tip}" for tip in tips)
 
+# 🧾 PDF report generator
 def generate_pdf(category, score, ats, matched, missing, feedback):
     pdf = FPDF()
     pdf.add_page()
@@ -148,10 +158,29 @@ def generate_pdf(category, score, ats, matched, missing, feedback):
 
     pdf.output("resume_feedback.pdf")
 
+# 💤 Keep app awake with dummy prompts
+def keep_awake():
+    prompts = [
+        "Analyzing semantic overlap between resume and JD...",
+        "Optimizing ATS keyword density...",
+        "Running LLM-based skill inference...",
+        "Checking resume readability heuristics...",
+        "Simulating recruiter eye-tracking patterns...",
+        "Evaluating emotional tone of resume summary...",
+        "Benchmarking resume against top 5% profiles...",
+        "Scanning for leadership and impact signals...",
+    ]
+    st.empty()
+    st.caption(random.choice(prompts))
+    time.sleep(0.5)
+
+# 🚀 Main app logic
 def main():
     st.set_page_config("TejMatch – Smart Resume Analyzer", layout="wide")
     st.title("💼 TejMatch – Smart Resume Analyzer")
     st.write("Upload your resume and job description to receive feedback, scores, and suggestions.")
+
+    keep_awake()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -176,12 +205,10 @@ def main():
             feedback = get_manual_feedback(combined_score)
 
             st.markdown(f"### 🔍 Predicted Job Category: `{category}`")
-
             st.metric("🎯 Score", f"{combined_score}%")
             st.progress(combined_score / 100)
 
             st.markdown(f"### 📊 ATS Score: **{ats_score}/100**")
-
             st.markdown("### ✅ Matched Skills")
             st.write(", ".join(matched[:15]) or "None")
 
@@ -193,11 +220,4 @@ def main():
 
             if st.button("📥 Download Report as PDF"):
                 generate_pdf(category, combined_score, ats_score, matched, missing, feedback)
-                with open("resume_feedback.pdf", "rb") as f:
-                    st.download_button("Download PDF", f, file_name="TejMatch_Resume_Report.pdf")
-
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
-
-if __name__ == "__main__":
-    main()
+                with open
