@@ -29,6 +29,7 @@ class TejMatchEngine:
         self.smote = SMOTE()
 
     def extract_text(self, file):
+        """Extracts text from PDF."""
         reader = PdfReader(file)
         return " ".join([page.extract_text() for page in reader.pages if page.extract_text()])
 
@@ -76,15 +77,16 @@ def main():
 
     # Input Sections
     res_file = st.file_uploader("Upload Resume (PDF)", type="pdf")
-    res_paste = st.text_area("OR Paste Resume Text", height=100)
+    res_paste = st.text_area("OR Paste Resume Content", height=100)
     jd_file = st.file_uploader("Upload JD PDF", type="pdf")
     jd_paste = st.text_area("OR Paste JD Text", height=100)
 
-    if st.button("Run Hybrid Analysis"):
-        final_res = engine.extract_text(res_file) if res_file else res_paste
-        final_jd = engine.extract_text(jd_file) if jd_file else jd_paste
+    # Automatically run when both inputs are detected
+    final_res = engine.extract_text(res_file) if res_file else res_paste
+    final_jd = engine.extract_text(jd_file) if jd_file else jd_paste
 
-        if final_res and final_jd:
+    if final_res and final_jd:
+        with st.spinner("Analyzing Match..."):
             rating, insights = engine.get_analysis(final_res, final_jd)
             
             # Display Score
@@ -106,10 +108,9 @@ def main():
                 - **SVC/KNN/RF**: Benchmarked to achieve a 15% accuracy boost.
                 - **Hybrid Logic**: Ratings are computed locally via SBERT/TF-IDF to save API costs.
                 """)
-        else:
-            st.error("Please provide both documents.")
 
-    st.markdown("<br><p style='text-align: right; font-size: 10px; color: gray;'>Built by Tejashwi Arya</p>", unsafe_with_stdio=True)
+    # FIXED: Corrected the argument to unsafe_allow_html
+    st.markdown("<br><p style='text-align: right; font-size: 10px; color: gray;'>Built by Tejashwi Arya</p>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
